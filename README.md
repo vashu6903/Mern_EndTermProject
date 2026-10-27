@@ -313,6 +313,22 @@ All 7 test suites validate against the database and socket gateway with zero war
 
 ---
 
+## 🔗 Project Links & Submission Details
+
+| Resource | Link / Information |
+|---|---|
+| **🌐 Live Deployed Application** | [https://mern-end-term-project-mu.vercel.app](https://mern-end-term-project-mu.vercel.app) |
+| **🔐 Presenter Direct Login** | [https://mern-end-term-project-mu.vercel.app/login](https://mern-end-term-project-mu.vercel.app/login) |
+| **🎥 Project Demonstration Video** | [Click here to watch Project Video on Google Drive](YOUR_GOOGLE_DRIVE_VIDEO_LINK_HERE) |
+| **🐙 GitHub Repository** | [https://github.com/vashu6903/Mern_EndTermProject](https://github.com/vashu6903/Mern_EndTermProject) |
+| **🔑 Demo Presenter Email** | `teacher@college.edu` |
+| **🔒 Demo Presenter Password** | `password123` |
+| **📌 Demo Session PIN** | `4892` |
+
+> **Note for Evaluators:** To test without creating a new account, use the pre-seeded **Demo Presenter** credentials above. You can create new polls manually or using the **AI Question Generator**, open live projector sessions, scan QR codes from any smartphone camera, and export PDF analytics reports.
+
+---
+
 ## 📄 License
 
 This project was built for academic evaluation under the ISC License. Free to use and reference for educational purposes.
