@@ -104,7 +104,17 @@ const JoinPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative">
+      {/* Top right Presenter Login link */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-10">
+        <button
+          onClick={() => navigate('/login')}
+          className="text-xs text-slate-400 hover:text-emerald-400 border border-slate-800 hover:border-emerald-500/30 bg-slate-900/70 backdrop-blur px-3 py-1.5 rounded-xl transition"
+        >
+          Presenter Login &rarr;
+        </button>
+      </div>
+
       {/* Background glow */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-3xl" />
@@ -174,6 +184,15 @@ const JoinPage = () => {
           </div>
           <p className="text-slate-700 text-xs">
             Your vote is anonymous and deduplicated
+          </p>
+          <p className="pt-2 text-slate-500 text-xs">
+            Want to host a poll?{' '}
+            <button
+              onClick={() => navigate('/login')}
+              className="text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-2 transition"
+            >
+              Sign in as Presenter &rarr;
+            </button>
           </p>
         </div>
       </div>
