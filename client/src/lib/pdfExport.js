@@ -176,3 +176,4 @@ export const exportPollToPDF = (exportData) => {
   const filename = `QuickPoll_${room.pin}_Analytics_Report.pdf`;
   doc.save(filename);
 };
+

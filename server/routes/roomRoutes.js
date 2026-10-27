@@ -8,12 +8,14 @@ const {
   getRoomDetails,
   updateRoomStatus,
   deleteRoom,
+  generateQuestionsAI,
 } = require('../controllers/roomController');
 const { protect } = require('../middleware/auth');
 
 // Protected presenter routes
 router.get('/my-rooms', protect, getMyRooms);
 router.post('/', protect, createRoom);
+router.post('/generate-ai', protect, generateQuestionsAI);
 
 // Public verification route
 router.get('/verify/:pin', verifyRoom);

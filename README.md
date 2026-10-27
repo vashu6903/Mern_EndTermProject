@@ -37,6 +37,7 @@ QuickPoll Live eliminates all participant onboarding barriers while maintaining 
 
 ### For Presenters
 - **Secure Presenter Authentication:** JWT-based presenter accounts with bcrypt-hashed credentials and 7-day persistent session management.
+- **✨ AI Question Generator:** Generate comprehensive, classroom-ready poll questions and 4 multiple-choice options in seconds powered by Google Gemini 1.5 Flash and QuickPoll's built-in intelligent domain engine. Supports custom topic prompts, question counts (2, 3, 5), and difficulty levels (Beginner, Intermediate, Advanced).
 - **Intuitive Poll Creation:** Fast room generator with automatic collision-free 4-digit PIN assignment and multi-option question builder.
 - **Projector-Ready Live View (`/presenter/:pin`):**
   - High-contrast, dark-mode presenter HUD optimized for lecture hall projection.
@@ -48,8 +49,8 @@ QuickPoll Live eliminates all participant onboarding barriers while maintaining 
   - **Lock / Unlock Voting:** Freeze submissions instantly with visual indicator status broadcasts.
   - **Show / Hide Correct Answer:** Reveal the correct answer to the audience on demand.
   - **Step-Through Navigation:** Advance questions cleanly with automatic voter UI resets.
-  - **One-Click PDF Analytics Export:** Generate and download branded, styled PDF analytical reports containing session metadata, response metrics, and question-by-question breakdowns.
-  - **Session Lifecycle & Room Management:** Close/end active sessions, reopen them on demand, or permanently delete rooms from the dashboard with cascading cleanup.
+  - **One-Click PDF Analytics Export:** Generate and download branded, styled PDF analytical reports containing session metadata, response metrics, and question-by-question breakdowns from both the Presenter view and the Dashboard.
+  - **Streamlined Room Management:** Delete unwanted rooms with cascading cleanup directly from the dashboard with a single confirmation.
 - **Export Formats:** Export poll analytics as PDF, CSV (`/api/rooms/:pin/export?format=csv`), or raw JSON.
 
 ### For Voters (Audience)

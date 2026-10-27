@@ -232,19 +232,7 @@ const PresenterPage = () => {
     }
   };
 
-  const handleEndPoll = async () => {
-    const shouldClose = confirm(
-      'Do you want to permanently CLOSE this session so voters can no longer submit votes?\n\nClick [OK] to Close Session and Return\nClick [Cancel] to keep session active'
-    );
-
-    if (shouldClose) {
-      try {
-        await api.patch(`/rooms/${pin}/status`, { status: 'ended' });
-        toast.info('Poll session closed. Returning to dashboard.');
-      } catch (err) {
-        toast.error('Failed to close session.');
-      }
-    }
+  const handleEndPoll = () => {
     navigate('/dashboard');
   };
 
@@ -534,13 +522,13 @@ const PresenterPage = () => {
             {/* Divider */}
             <div className="h-px bg-slate-800 my-1" />
 
-            {/* End Poll */}
+            {/* Exit to Dashboard */}
             <button
               onClick={handleEndPoll}
-              className="w-full flex items-center space-x-2 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:border-red-500/30 hover:text-red-400 hover:bg-red-500/5 font-medium text-xs transition-all duration-200"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200 hover:bg-slate-800/60 font-medium text-xs transition-all duration-200"
             >
               <Square className="w-3.5 h-3.5" />
-              <span>Exit / Close Session</span>
+              <span>Exit to Dashboard</span>
             </button>
           </div>
 

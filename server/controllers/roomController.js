@@ -472,6 +472,37 @@ const deleteRoom = async (req, res, next) => {
   }
 };
 
+const { generatePollQuestions } = require('../services/aiService');
+
+// @desc    Generate questions using AI (Gemini / OpenAI / Smart Domain Engine)
+// @route   POST /api/rooms/generate-ai
+// @access  Private (Presenter)
+const generateQuestionsAI = async (req, res, next) => {
+  try {
+    const { topic, count, difficulty, customApiKey } = req.body;
+    if (!topic || !topic.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide a topic or subject for question generation.',
+      });
+    }
+
+    const result = await generatePollQuestions({
+      topic: topic.trim(),
+      count: count || 3,
+      difficulty: difficulty || 'intermediate',
+      customApiKey: customApiKey ? customApiKey.trim() : '',
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getMyRooms,
   createRoom,
@@ -480,5 +511,6 @@ module.exports = {
   getRoomDetails,
   updateRoomStatus,
   deleteRoom,
+  generateQuestionsAI,
 };
 
