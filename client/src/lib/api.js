@@ -1,7 +1,15 @@
 import axios from 'axios';
 
+// When deployed on Vercel, VITE_API_URL points to the Render backend (e.g. https://quickpoll-api.onrender.com)
+// In local dev or unified Render deployment, it falls back to '/api'
+const rawApiUrl = import.meta.env.VITE_API_URL;
+const baseURL = rawApiUrl
+  ? `${rawApiUrl.replace(/\/$/, '')}/api`
+  : '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },

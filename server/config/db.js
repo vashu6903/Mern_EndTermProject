@@ -2,7 +2,11 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
+    const uri = process.env.MONGO_URI || process.env.dbURL;
+    if (!uri) {
+      throw new Error('Neither MONGO_URI nor dbURL is defined in environment variables.');
+    }
+    const conn = await mongoose.connect(uri, {
       autoIndex: true, // Build indexes automatically in development
     });
     console.log(`[Database] MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);

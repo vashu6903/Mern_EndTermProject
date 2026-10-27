@@ -70,7 +70,15 @@ app.set('io', io);
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 
-// System Health Check Endpoint
+// System Health Check Endpoints (Supports both /health and /api/health)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Server is running',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
@@ -126,11 +134,11 @@ process.on('uncaughtException', (error) => {
 const PORT = process.env.PORT || 5000;
 
 if (require.main === module) {
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`==================================================`);
     console.log(`🚀 QuickPoll Live Engine running on port ${PORT}`);
     console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🌐 Socket.io gateway active & listening`);
+    console.log(`🌐 Socket.io gateway active & listening on 0.0.0.0:${PORT}`);
     console.log(`==================================================`);
   });
 }

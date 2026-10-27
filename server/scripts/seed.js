@@ -7,7 +7,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
 const { User, Room, Question, VoteLog } = require('../models');
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/quickpoll_live';
+const MONGO_URI = process.env.MONGO_URI || process.env.dbURL || 'mongodb://127.0.0.1:27017/quickpoll_live';
 
 const seedDatabase = async () => {
   try {
