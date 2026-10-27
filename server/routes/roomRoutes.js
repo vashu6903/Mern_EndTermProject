@@ -6,6 +6,8 @@ const {
   verifyRoom,
   exportRoomResults,
   getRoomDetails,
+  updateRoomStatus,
+  deleteRoom,
 } = require('../controllers/roomController');
 const { protect } = require('../middleware/auth');
 
@@ -19,6 +21,8 @@ router.get('/verify/:pin', verifyRoom);
 // Single room details & export
 router.get('/:pin/export', protect, exportRoomResults);
 router.get('/:pin', protect, getRoomDetails);
+router.patch('/:pin/status', protect, updateRoomStatus);
+router.delete('/:pin', protect, deleteRoom);
 
 module.exports = router;
 

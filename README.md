@@ -43,11 +43,14 @@ QuickPoll Live eliminates all participant onboarding barriers while maintaining 
   - On-screen dynamic SVG QR code encoding the exact session link.
   - Real-time animated vote distribution bars with option letters (A, B, C, D), percentage displays, raw counters, and leading winner badges (👑).
   - Live connected headcount and total vote telemetry.
-- **Live Session Controls:**
+- **Live Session Controls & Enhancements:**
+  - **Synchronized Live Countdown Timer:** Select 15s, 30s, or 60s countdowns with animated progress bar synchronized in real-time across voter devices. Automatically locks submissions on expiration.
   - **Lock / Unlock Voting:** Freeze submissions instantly with visual indicator status broadcasts.
   - **Show / Hide Correct Answer:** Reveal the correct answer to the audience on demand.
   - **Step-Through Navigation:** Advance questions cleanly with automatic voter UI resets.
-  - **End Poll & Export:** Export poll analytics as JSON or downloaded CSV reports (`/api/rooms/:pin/export?format=csv`).
+  - **One-Click PDF Analytics Export:** Generate and download branded, styled PDF analytical reports containing session metadata, response metrics, and question-by-question breakdowns.
+  - **Session Lifecycle & Room Management:** Close/end active sessions, reopen them on demand, or permanently delete rooms from the dashboard with cascading cleanup.
+- **Export Formats:** Export poll analytics as PDF, CSV (`/api/rooms/:pin/export?format=csv`), or raw JSON.
 
 ### For Voters (Audience)
 - **Frictionless Entry:** Clean PIN input screen (`/join`) with automatic query parameter parsing (`?pin=4892`).

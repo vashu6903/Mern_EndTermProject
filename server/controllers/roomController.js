@@ -369,11 +369,116 @@ const getRoomDetails = async (req, res, next) => {
   }
 };
 
+// @desc    Update room status ('active', 'locked', 'ended')
+// @route   PATCH /api/rooms/:pin/status
+// @access  Private (Presenter)
+const updateRoomStatus = async (req, res, next) => {
+  try {
+    const pin = (req.params.pin || '').toUpperCase().trim();
+    const { status } = req.body;
+
+    if (!['draft', 'active', 'locked', 'ended'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status. Must be draft, active, locked, or ended.',
+      });
+    }
+
+    const room = await Room.findOne({ pin });
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        error: `Room with PIN ${pin} not found.`,
+      });
+    }
+
+    if (!room.presenterId.equals(req.user._id)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. You are not the presenter of this room.',
+      });
+    }
+
+    room.status = status;
+    await room.save();
+
+    // Broadcast status change via Socket.io if available
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`room:${pin}`).emit('room_status_changed', {
+        pin,
+        status,
+        message:
+          status === 'ended'
+            ? 'The poll session has been closed by the presenter.'
+            : `Room status updated to ${status}.`,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: room,
+      message: `Room status updated to ${status}.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete room and all associated questions & vote logs
+// @route   DELETE /api/rooms/:pin
+// @access  Private (Presenter)
+const deleteRoom = async (req, res, next) => {
+  try {
+    const pin = (req.params.pin || '').toUpperCase().trim();
+
+    const room = await Room.findOne({ pin });
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        error: `Room with PIN ${pin} not found.`,
+      });
+    }
+
+    if (!room.presenterId.equals(req.user._id)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied. You are not the presenter of this room.',
+      });
+    }
+
+    // Cascade delete questions and vote logs
+    await Promise.all([
+      Question.deleteMany({ roomId: room._id }),
+      VoteLog.deleteMany({ roomId: room._id }),
+      Room.deleteOne({ _id: room._id }),
+    ]);
+
+    // Notify connected sockets that room was removed
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`room:${pin}`).emit('room_deleted', {
+        pin,
+        message: 'This poll room has been deleted by the presenter.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Room ${pin} and all associated data were successfully deleted.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getMyRooms,
   createRoom,
   verifyRoom,
   exportRoomResults,
   getRoomDetails,
+  updateRoomStatus,
+  deleteRoom,
 };
 

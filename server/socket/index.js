@@ -2,6 +2,9 @@ const { Room, Question, VoteLog } = require('../models');
 const { verifyToken } = require('../utils/token');
 
 const initSocketServer = (io) => {
+  // Global timer map across rooms: pin -> { timerId, endsAt, duration, questionId }
+  const roomTimers = new Map();
+
   // Room participant counter helper
   const getParticipantCount = (pin) => {
     const roomChannel = io.sockets.adapter.rooms.get(`room:${pin}`);
@@ -96,6 +99,20 @@ const initSocketServer = (io) => {
 
         const participantCount = getParticipantCount(normalizedPin);
 
+        // Check for active countdown timer
+        let activeTimer = null;
+        if (roomTimers.has(normalizedPin)) {
+          const t = roomTimers.get(normalizedPin);
+          const remainingMs = t.endsAt - Date.now();
+          if (remainingMs > 0) {
+            activeTimer = {
+              duration: t.duration,
+              endsAt: t.endsAt,
+              remainingSeconds: Math.ceil(remainingMs / 1000),
+            };
+          }
+        }
+
         const roomState = {
           pin: room.pin,
           title: room.title,
@@ -103,6 +120,7 @@ const initSocketServer = (io) => {
           role: socket.data.role,
           participantCount,
           totalQuestions,
+          activeTimer,
           currentQuestion: activeQuestion
             ? {
                 id: activeQuestion._id,
@@ -191,6 +209,13 @@ const initSocketServer = (io) => {
         room.activeQuestionId = nextQuestion._id;
         await room.save();
 
+        // Clear any running timer for this room
+        if (roomTimers.has(normalizedPin)) {
+          clearTimeout(roomTimers.get(normalizedPin).timerId);
+          roomTimers.delete(normalizedPin);
+          io.to(`room:${normalizedPin}`).emit('timer_stopped', { pin: normalizedPin });
+        }
+
         const channel = `room:${normalizedPin}`;
 
         const questionPayload = {
@@ -275,6 +300,123 @@ const initSocketServer = (io) => {
       } catch (error) {
         console.error('[Socket toggle_voting_lock Error]', error);
         socket.emit('error', { message: 'Failed to toggle voting lock: ' + error.message });
+        if (callback) callback({ success: false, error: error.message });
+      }
+    });
+
+    // ==========================================
+    // 3.5. LIVE COUNTDOWN TIMER ENGINE
+    // ==========================================
+    socket.on('start_timer', async (payload, callback) => {
+      try {
+        const { pin, duration = 30 } = payload || {};
+        const normalizedPin = (pin || socket.data.pin || '').toString().toUpperCase().trim();
+
+        if (socket.data.role !== 'presenter') {
+          const err = { message: 'Only the presenter can start a timer.' };
+          if (callback) callback({ success: false, error: err.message });
+          return socket.emit('error', err);
+        }
+
+        const room = await Room.findOne({ pin: normalizedPin });
+        if (!room || !room.activeQuestionId) {
+          const err = { message: 'Active room and question required to start timer.' };
+          if (callback) callback({ success: false, error: err.message });
+          return socket.emit('error', err);
+        }
+
+        // Make sure question is currently unlocked
+        await Question.updateOne({ _id: room.activeQuestionId }, { isLocked: false });
+
+        // Clear existing timer if any
+        if (roomTimers.has(normalizedPin)) {
+          clearTimeout(roomTimers.get(normalizedPin).timerId);
+          roomTimers.delete(normalizedPin);
+        }
+
+        const numericDuration = Math.max(5, Math.min(300, Number(duration) || 30));
+        const endsAt = Date.now() + numericDuration * 1000;
+
+        // Schedule automatic lock when timer expires
+        const timerId = setTimeout(async () => {
+          roomTimers.delete(normalizedPin);
+          try {
+            const currentRoom = await Room.findOne({ pin: normalizedPin });
+            if (currentRoom && currentRoom.activeQuestionId) {
+              await Question.updateOne({ _id: currentRoom.activeQuestionId }, { isLocked: true });
+
+              const channel = `room:${normalizedPin}`;
+              io.to(channel).emit('timer_ended', {
+                questionId: currentRoom.activeQuestionId,
+              });
+              io.to(channel).emit('voting_status_changed', {
+                questionId: currentRoom.activeQuestionId,
+                isLocked: true,
+                message: "Time is up! Voting has been locked.",
+              });
+              console.log(`[Socket Timer] Room ${normalizedPin} timer expired. Question locked.`);
+            }
+          } catch (tErr) {
+            console.error('[Socket Timer Expiration Error]', tErr);
+          }
+        }, numericDuration * 1000);
+
+        roomTimers.set(normalizedPin, {
+          timerId,
+          endsAt,
+          duration: numericDuration,
+          questionId: room.activeQuestionId,
+        });
+
+        const timerPayload = {
+          questionId: room.activeQuestionId,
+          duration: numericDuration,
+          endsAt,
+        };
+
+        const channel = `room:${normalizedPin}`;
+        // Unlock question state visually and broadcast timer
+        io.to(channel).emit('voting_status_changed', {
+          questionId: room.activeQuestionId,
+          isLocked: false,
+        });
+        io.to(channel).emit('timer_started', timerPayload);
+
+        console.log(`[Socket Timer] Room ${normalizedPin} started ${numericDuration}s timer`);
+
+        if (callback) callback({ success: true, data: timerPayload });
+      } catch (error) {
+        console.error('[Socket start_timer Error]', error);
+        socket.emit('error', { message: 'Failed to start timer: ' + error.message });
+        if (callback) callback({ success: false, error: error.message });
+      }
+    });
+
+    socket.on('stop_timer', async (payload, callback) => {
+      try {
+        const { pin } = payload || {};
+        const normalizedPin = (pin || socket.data.pin || '').toString().toUpperCase().trim();
+
+        if (socket.data.role !== 'presenter') {
+          const err = { message: 'Only the presenter can stop a timer.' };
+          if (callback) callback({ success: false, error: err.message });
+          return socket.emit('error', err);
+        }
+
+        if (roomTimers.has(normalizedPin)) {
+          clearTimeout(roomTimers.get(normalizedPin).timerId);
+          roomTimers.delete(normalizedPin);
+        }
+
+        const channel = `room:${normalizedPin}`;
+        io.to(channel).emit('timer_stopped', { pin: normalizedPin });
+
+        console.log(`[Socket Timer] Room ${normalizedPin} timer stopped`);
+
+        if (callback) callback({ success: true });
+      } catch (error) {
+        console.error('[Socket stop_timer Error]', error);
+        socket.emit('error', { message: 'Failed to stop timer: ' + error.message });
         if (callback) callback({ success: false, error: error.message });
       }
     });
@@ -431,4 +573,3 @@ const initSocketServer = (io) => {
 };
 
 module.exports = initSocketServer;
-

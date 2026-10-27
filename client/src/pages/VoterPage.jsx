@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, CheckCircle2, Clock, Lock, Radio,
-  WifiOff, Users, ArrowLeft, Loader2
+  WifiOff, Users, ArrowLeft, Loader2, AlertCircle, Power
 } from 'lucide-react';
 import { connectSocket, disconnectSocket } from '../lib/socket';
 import { toast } from '../components/Toast';
@@ -30,13 +30,6 @@ const OPTION_THEMES = [
   { base: 'border-slate-700 bg-slate-800/60 hover:border-teal-500/60 hover:bg-teal-500/10 active:scale-95',     selected: 'border-teal-500 bg-teal-500/20 ring-2 ring-teal-500/30',       label: 'bg-teal-500 text-slate-950',     text: 'text-teal-400' },
 ];
 
-// ─── Vote State Enum ───────────────────────────────────────────────
-// 'idle'       → No vote cast yet, buttons active
-// 'submitting' → Awaiting server acknowledgement
-// 'voted'      → Vote confirmed, waiting for next question
-// 'locked'     → Presenter locked voting
-// 'connecting' → Initial socket connection
-
 const VoterPage = () => {
   const { pin } = useParams();
   const location = useLocation();
@@ -46,25 +39,67 @@ const VoterPage = () => {
   const socketRef = useRef(null);
 
   // ─── State ──────────────────────────────────────────────────────
-  const [voteState, setVoteState] = useState('connecting'); // see enum above
+  const [voteState, setVoteState] = useState('connecting'); // 'connecting' | 'idle' | 'submitting' | 'voted' | 'locked' | 'ended'
   const [roomTitle, setRoomTitle] = useState(location.state?.title || `Room ${pin}`);
-  const [question, setQuestion] = useState(null);       // { id, order, text, options, isLocked }
+  const [question, setQuestion] = useState(null);
   const [totalQuestions, setTotalQuestions] = useState(null);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
   const [participantCount, setParticipantCount] = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
   const [previouslyVotedOptionId, setPreviouslyVotedOptionId] = useState(null);
 
-  // ─── Socket Setup ────────────────────────────────────────────────
+  // Countdown timer state
+  const [timerRemaining, setTimerRemaining] = useState(null);
+  const [timerTotal, setTimerTotal] = useState(null);
+  const timerIntervalRef = useRef(null);
+
+  const clearVoterTimer = useCallback(() => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    setTimerRemaining(null);
+    setTimerTotal(null);
+  }, []);
+
+  const startVoterCountdown = useCallback((endsAt, duration) => {
+    clearVoterTimer();
+    setTimerTotal(duration || 30);
+
+    const tick = () => {
+      const remainingMs = endsAt - Date.now();
+      const sec = Math.max(0, Math.ceil(remainingMs / 1000));
+      setTimerRemaining(sec);
+
+      if (sec <= 0) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+        setTimerRemaining(0);
+      }
+    };
+
+    tick();
+    timerIntervalRef.current = setInterval(tick, 1000);
+  }, [clearVoterTimer]);
+
+  // ─── Socket Room State ───────────────────────────────────────────
   const handleRoomState = useCallback((data) => {
     setRoomTitle(data.title || roomTitle);
     setTotalQuestions(data.totalQuestions);
     setParticipantCount(data.participantCount);
 
+    if (data.status === 'ended') {
+      setVoteState('ended');
+      return;
+    }
+
+    if (data.activeTimer && data.activeTimer.endsAt > Date.now()) {
+      startVoterCountdown(data.activeTimer.endsAt, data.activeTimer.duration);
+    }
+
     if (data.currentQuestion) {
       setQuestion(data.currentQuestion);
 
-      // Restore previously voted state if voter already voted on this question
       if (data.hasVoted) {
         setSelectedOptionId(data.votedOptionId);
         setPreviouslyVotedOptionId(data.votedOptionId);
@@ -77,7 +112,7 @@ const VoterPage = () => {
     } else {
       setVoteState('idle');
     }
-  }, [roomTitle]);
+  }, [roomTitle, startVoterCountdown]);
 
   useEffect(() => {
     const socket = connectSocket();
@@ -111,12 +146,13 @@ const VoterPage = () => {
       setVoteState('idle');
     });
 
-    // Presenter advanced to next question → reset voter state
+    // Presenter advanced to next question
     socket.on('question_changed', ({ question: newQuestion, totalQuestions: total }) => {
       setQuestion(newQuestion);
       setSelectedOptionId(null);
       setPreviouslyVotedOptionId(null);
       setTotalQuestions(total || totalQuestions);
+      clearVoterTimer();
 
       if (newQuestion.isLocked) {
         setVoteState('locked');
@@ -127,17 +163,38 @@ const VoterPage = () => {
 
     // Presenter toggled voting lock
     socket.on('voting_status_changed', ({ isLocked }) => {
-      setQuestion((prev) => prev ? { ...prev, isLocked } : prev);
+      setQuestion((prev) => (prev ? { ...prev, isLocked } : prev));
       setVoteState((prev) => {
-        if (prev === 'voted') return 'voted'; // already voted — lock has no effect
+        if (prev === 'voted') return 'voted';
         return isLocked ? 'locked' : 'idle';
       });
     });
 
-    // Live results: optionally track own vote visually
-    socket.on('results_updated', () => {
-      // Voter UI intentionally doesn't show bar results (that's presenter view)
-      // We could optionally show a vote distribution here in future
+    // Timer broadcast events
+    socket.on('timer_started', ({ endsAt, duration }) => {
+      startVoterCountdown(endsAt, duration);
+      setVoteState((prev) => (prev === 'voted' ? 'voted' : 'idle'));
+    });
+
+    socket.on('timer_ended', () => {
+      setTimerRemaining(0);
+      setVoteState((prev) => (prev === 'voted' ? 'voted' : 'locked'));
+    });
+
+    socket.on('timer_stopped', () => {
+      clearVoterTimer();
+    });
+
+    // Room status updates (e.g. presenter closes room)
+    socket.on('room_status_changed', ({ status }) => {
+      if (status === 'ended') {
+        setVoteState('ended');
+      }
+    });
+
+    socket.on('room_deleted', () => {
+      toast.error('This room was deleted by the presenter.');
+      navigate('/join');
     });
 
     socket.on('participant_count_updated', ({ count }) => {
@@ -156,12 +213,17 @@ const VoterPage = () => {
       socket.off('connect_error');
       socket.off('question_changed');
       socket.off('voting_status_changed');
-      socket.off('results_updated');
+      socket.off('timer_started');
+      socket.off('timer_ended');
+      socket.off('timer_stopped');
+      socket.off('room_status_changed');
+      socket.off('room_deleted');
       socket.off('participant_count_updated');
       socket.off('room_error');
+      clearVoterTimer();
       disconnectSocket();
     };
-  }, [pin, voterToken, handleRoomState]);
+  }, [pin, voterToken, handleRoomState, startVoterCountdown, clearVoterTimer, navigate]);
 
   // ─── Cast Vote ───────────────────────────────────────────────────
   const castVote = (optionId) => {
@@ -171,7 +233,6 @@ const VoterPage = () => {
       return;
     }
 
-    // Optimistic UI — highlight immediately
     setSelectedOptionId(optionId);
     setVoteState('submitting');
 
@@ -179,10 +240,9 @@ const VoterPage = () => {
       'cast_vote',
       { pin, questionId: question.id, optionId, voterToken },
       (response) => {
-        if (!response) return; // no callback from server (shouldn't happen)
+        if (!response) return;
         if (!response.success) {
           if (response.votedOptionId) {
-            // Already voted — restore state
             setSelectedOptionId(response.votedOptionId);
             setPreviouslyVotedOptionId(response.votedOptionId);
             setVoteState('voted');
@@ -195,7 +255,6 @@ const VoterPage = () => {
       }
     );
 
-    // Listen for server-emitted vote_confirmed or already_voted events
     socketRef.current.once('vote_confirmed', () => {
       setPreviouslyVotedOptionId(optionId);
       setVoteState('voted');
@@ -208,7 +267,6 @@ const VoterPage = () => {
     });
   };
 
-  // ─── Render Helpers ──────────────────────────────────────────────
   const isInteractive = voteState === 'idle';
   const isSubmitting = voteState === 'submitting';
   const hasVoted = voteState === 'voted';
@@ -223,6 +281,29 @@ const VoterPage = () => {
           <p className="text-slate-300 font-semibold">Joining Room</p>
           <p className="text-emerald-400 font-mono font-black text-2xl mt-1">{pin}</p>
         </div>
+      </div>
+    );
+  }
+
+  // ─── Screen: Session Closed ──────────────────────────────────────
+  if (voteState === 'ended') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center">
+          <Power className="w-8 h-8 text-red-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-slate-100">Session Closed</h2>
+          <p className="text-sm text-slate-400 mt-1 max-w-xs">
+            The presenter has ended this poll session. Thank you for participating!
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/join')}
+          className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2.5 rounded-xl text-sm font-semibold transition"
+        >
+          Join Another Poll
+        </button>
       </div>
     );
   }
@@ -259,7 +340,7 @@ const VoterPage = () => {
       </header>
 
       {/* ─── MAIN BODY ──────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col max-w-lg mx-auto w-full px-4 py-6 space-y-5">
+      <main className="flex-1 flex flex-col max-w-lg mx-auto w-full px-4 py-6 space-y-4">
 
         {/* Room Title & Question Progress */}
         <div>
@@ -270,7 +351,6 @@ const VoterPage = () => {
               <strong className="text-slate-200">{question?.order || '—'}</strong>
               {totalQuestions ? ` of ${totalQuestions}` : ''}
             </span>
-            {/* Progress dots */}
             {totalQuestions && (
               <div className="flex space-x-1">
                 {Array.from({ length: totalQuestions }).map((_, i) => (
@@ -290,12 +370,36 @@ const VoterPage = () => {
           </div>
         </div>
 
-        {/* ─── Status Banner ─────────────────────────────────────── */}
-        {isLocked && (
-          <div className="flex items-center space-x-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3">
-            <Lock className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <p className="text-sm text-amber-300 font-medium">
-              Voting is currently locked by the presenter.
+        {/* ─── Live Timer Countdown Banner ───────────────────────── */}
+        {timerRemaining !== null && timerRemaining > 0 && !hasVoted && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-amber-400 font-semibold flex items-center space-x-1.5">
+                <Clock className="w-4 h-4 animate-spin" />
+                <span>Time Remaining</span>
+              </span>
+              <span className="font-mono text-amber-300 font-black text-sm">
+                {timerRemaining}s
+              </span>
+            </div>
+            {/* Animated progress bar */}
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-amber-400 h-1.5 rounded-full transition-all duration-1000 ease-linear"
+                style={{
+                  width: `${Math.min(100, (timerRemaining / (timerTotal || 30)) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ─── Status Banner: Locked ─────────────────────────────── */}
+        {isLocked && !hasVoted && (
+          <div className="flex items-center space-x-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
+            <Lock className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <p className="text-sm text-red-300 font-medium">
+              Voting on this question is locked by the presenter.
             </p>
           </div>
         )}
@@ -331,7 +435,6 @@ const VoterPage = () => {
                         ${isSubmitting && isSelected ? 'animate-pulse' : ''}
                       `}
                     >
-                      {/* Letter Badge */}
                       <div className={`flex-shrink-0 w-10 h-10 rounded-xl text-sm font-black flex items-center justify-center shadow-md transition-all duration-200
                         ${isSelected ? theme.label : 'bg-slate-700 text-slate-300'}`}
                       >
@@ -342,7 +445,6 @@ const VoterPage = () => {
                         )}
                       </div>
 
-                      {/* Option Text */}
                       <span className={`flex-1 leading-snug transition-colors duration-200
                         ${isSelected ? theme.text : 'text-slate-200'}`}
                       >
@@ -359,7 +461,6 @@ const VoterPage = () => {
             ) : (
               // ─── Screen C: Voted Confirmation / Waiting ──────────
               <div className="flex-1 flex flex-col space-y-4">
-                {/* Voted Confirmation Card */}
                 <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center space-y-3">
                   <div className="w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
                     <CheckCircle2 className="w-7 h-7 text-emerald-400" />
@@ -372,7 +473,6 @@ const VoterPage = () => {
                   </div>
                 </div>
 
-                {/* Show which option was selected, grayed out */}
                 <div className="space-y-2 opacity-60">
                   {question.options?.map((option, index) => {
                     const theme = OPTION_THEMES[index % OPTION_THEMES.length];
@@ -399,7 +499,6 @@ const VoterPage = () => {
                   })}
                 </div>
 
-                {/* Waiting indicator */}
                 <div className="flex items-center justify-center space-x-2 py-4">
                   <Clock className="w-4 h-4 text-slate-600 animate-pulse" />
                   <span className="text-xs text-slate-600">Waiting for presenter...</span>
@@ -408,7 +507,6 @@ const VoterPage = () => {
             )}
           </>
         ) : (
-          // No active question yet
           <div className="flex-1 flex flex-col items-center justify-center text-center py-12 space-y-4">
             <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center">
               <BarChart3 className="w-7 h-7 text-slate-600" />
@@ -430,7 +528,6 @@ const VoterPage = () => {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="pb-6 text-center">
         <p className="text-xs text-slate-700">
           QuickPoll Live &bull; Your vote is anonymous
@@ -441,4 +538,3 @@ const VoterPage = () => {
 };
 
 export default VoterPage;
-

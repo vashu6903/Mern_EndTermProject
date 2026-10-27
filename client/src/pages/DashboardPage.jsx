@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Plus, LogOut, Radio, Clock, Users,
-  ChevronRight, Loader2, AlertCircle, Hash, Activity
+  ChevronRight, Loader2, AlertCircle, Hash, Activity,
+  FileText, Trash2, Power, RotateCcw, AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import { toast } from '../components/Toast';
+import { exportPollToPDF } from '../lib/pdfExport';
 
 const STATUS_COLORS = {
   active: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
@@ -179,49 +181,147 @@ const CreateRoomModal = ({ onClose, onCreated }) => {
   );
 };
 
-const RoomCard = ({ room, onOpen }) => {
-  const totalVotes = room.questions?.reduce(
-    (sum, q) => sum + (q.options?.reduce((s, o) => s + (o.voteCount || 0), 0) || 0),
-    0
-  ) || 0;
+const RoomCard = ({ room, onOpen, onDownloadPDF, onToggleStatus, onDelete }) => {
+  const [downloading, setDownloading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  const totalVotes =
+    room.questions?.reduce(
+      (sum, q) => sum + (q.options?.reduce((s, o) => s + (o.voteCount || 0), 0) || 0),
+      0
+    ) || 0;
+
+  const handlePDF = async (e) => {
+    e.stopPropagation();
+    setDownloading(true);
+    try {
+      await onDownloadPDF(room.pin);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleStatus = async (e) => {
+    e.stopPropagation();
+    setStatusLoading(true);
+    try {
+      await onToggleStatus(room.pin, room.status);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to permanently delete room "${room.title}" (PIN: ${room.pin})? This cannot be undone.`)) {
+      onDelete(room.pin);
+    }
+  };
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 transition-all duration-200 group">
-      <div className="flex items-start justify-between">
+    <div className="bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 transition-all duration-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Left Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center space-x-2 mb-1">
+          <div className="flex items-center space-x-2 mb-1.5">
             <span
-              className={`inline-flex items-center space-x-1.5 text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS_COLORS[room.status]}`}
+              className={`inline-flex items-center space-x-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${STATUS_COLORS[room.status]}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[room.status]} ${room.status === 'active' ? 'animate-pulse' : ''}`} />
               <span className="capitalize">{room.status}</span>
             </span>
+            <span className="text-xs text-slate-500 font-mono">
+              Created {new Date(room.createdAt).toLocaleDateString()}
+            </span>
           </div>
-          <h3 className="text-sm font-semibold text-slate-100 truncate group-hover:text-emerald-400 transition">
+
+          <h3 className="text-base font-semibold text-slate-100 truncate">
             {room.title}
           </h3>
-          <div className="flex items-center space-x-4 mt-2 text-xs text-slate-500">
+
+          <div className="flex items-center space-x-4 mt-2 text-xs text-slate-400">
             <span className="flex items-center space-x-1">
-              <Hash className="w-3 h-3" />
-              <span className="font-mono font-bold text-slate-300">{room.pin}</span>
+              <Hash className="w-3.5 h-3.5 text-slate-500" />
+              <span>PIN:</span>
+              <span className="font-mono font-bold text-emerald-400">{room.pin}</span>
             </span>
             <span className="flex items-center space-x-1">
-              <BarChart3 className="w-3 h-3" />
+              <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
               <span>{room.questionCount || 0} questions</span>
             </span>
             <span className="flex items-center space-x-1">
-              <Activity className="w-3 h-3" />
+              <Activity className="w-3.5 h-3.5 text-slate-500" />
               <span>{totalVotes} votes</span>
             </span>
           </div>
         </div>
-        <button
-          onClick={() => onOpen(room.pin)}
-          className="ml-4 flex-shrink-0 flex items-center space-x-1.5 bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/30 hover:border-emerald-500 text-emerald-400 hover:text-slate-950 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200"
-        >
-          <span>Open</span>
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+
+        {/* Right Actions */}
+        <div className="flex items-center space-x-2 flex-wrap sm:flex-nowrap">
+          {/* PDF Report Download */}
+          <button
+            onClick={handlePDF}
+            disabled={downloading}
+            title="Download PDF Analytics Report"
+            className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-slate-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-medium transition"
+          >
+            {downloading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileText className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span className="hidden sm:inline">PDF Report</span>
+          </button>
+
+          {/* Close or Reopen Room */}
+          {room.status === 'active' ? (
+            <button
+              onClick={handleStatus}
+              disabled={statusLoading}
+              title="Close Poll Session"
+              className="flex items-center space-x-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 px-3 py-1.5 rounded-xl text-xs font-medium transition"
+            >
+              {statusLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Power className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">Close</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleStatus}
+              disabled={statusLoading}
+              title="Reopen Poll Session"
+              className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-medium transition"
+            >
+              {statusLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+              <span className="hidden sm:inline">Reopen</span>
+            </button>
+          )}
+
+          {/* Delete Room */}
+          <button
+            onClick={handleDelete}
+            title="Permanently Delete Room"
+            className="flex items-center space-x-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-medium transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Open Presenter Display */}
+          <button
+            onClick={() => onOpen(room.pin)}
+            className="flex items-center space-x-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3.5 py-1.5 rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
+          >
+            <span>Open</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -257,6 +357,39 @@ const DashboardPage = () => {
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const handleDownloadPDF = async (pin) => {
+    try {
+      const res = await api.get(`/rooms/${pin}/export`);
+      exportPollToPDF(res.data.data);
+      toast.success(`PDF report downloaded for room ${pin}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to generate PDF report.');
+    }
+  };
+
+  const handleToggleStatus = async (pin, currentStatus) => {
+    const nextStatus = currentStatus === 'active' ? 'ended' : 'active';
+    try {
+      await api.patch(`/rooms/${pin}/status`, { status: nextStatus });
+      toast.success(nextStatus === 'ended' ? `Room ${pin} session closed.` : `Room ${pin} reopened.`);
+      setRooms((prev) =>
+        prev.map((r) => (r.pin === pin ? { ...r, status: nextStatus } : r))
+      );
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update room status.');
+    }
+  };
+
+  const handleDeleteRoom = async (pin) => {
+    try {
+      await api.delete(`/rooms/${pin}`);
+      toast.success(`Room ${pin} permanently deleted.`);
+      setRooms((prev) => prev.filter((r) => r.pin !== pin));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete room.');
+    }
   };
 
   const activeRooms = rooms.filter((r) => r.status === 'active');
@@ -361,6 +494,9 @@ const DashboardPage = () => {
                   key={room._id}
                   room={room}
                   onOpen={(pin) => navigate(`/presenter/${pin}`)}
+                  onDownloadPDF={handleDownloadPDF}
+                  onToggleStatus={handleToggleStatus}
+                  onDelete={handleDeleteRoom}
                 />
               ))}
             </div>
@@ -376,4 +512,3 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
-
