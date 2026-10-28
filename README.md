@@ -319,7 +319,7 @@ All 7 test suites validate against the database and socket gateway with zero war
 |---|---|
 | **🌐 Live Deployed Application** | [https://mern-end-term-project-mu.vercel.app](https://mern-end-term-project-mu.vercel.app) |
 | **🔐 Presenter Direct Login** | [https://mern-end-term-project-mu.vercel.app/login](https://mern-end-term-project-mu.vercel.app/login) |
-| **🎥 Project Demonstration Video** | [Click here to watch Project Video on Google Drive](YOUR_GOOGLE_DRIVE_VIDEO_LINK_HERE) |
+| **🎥 Project Demonstration Video** | [Click here to watch Project Video on Google Drive](https://drive.google.com/drive/u/1/folders/1k4qGk6U2OScbKxRyTqBDK26WAm1Y2G9y) |
 | **🐙 GitHub Repository** | [https://github.com/vashu6903/Mern_EndTermProject](https://github.com/vashu6903/Mern_EndTermProject) |
 | **🔑 Demo Presenter Email** | `teacher@college.edu` |
 | **🔒 Demo Presenter Password** | `password123` |
